@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brand Safety Content Checker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'safe': '#059669', // Emerald 600
+                        'unsafe': '#dc2626', // Red 600
+                        'primary-blue': '#3b82f6', 
+                        'light-gray': '#f4f5f7',
+                        'ai-orange': '#f97316', // Orange 500 for the new button
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Ensuring smooth transitions for visual feedback */
+        .transition-colors { transition: background-color 0.3s, border-color 0.3s; }
+        
+        /* Basic cleanup for textareas */
+        textarea { resize: none; }
+    </style>
+</head>
+<body class="bg-light-gray min-h-screen font-sans p-4 sm:p-8">
+
+    <div class="max-w-6xl mx-auto bg-white shadow-2xl rounded-xl p-6 md:p-10">
+        
+        <header class="text-center mb-10">
+            <h1 class="text-4xl font-extrabold text-gray-900 mb-2">Content Safety Analyzer</h1>
+            <p class="text-gray-500 text-lg">Paste the article content below to check it against sensitive keywords.</p>
+        </header>
+
+        <div class="grid grid-cols-1 gap-8">
+            
+            <div class="lg:col-span-1">
+                <label for="articleContent" class="block text-xl font-semibold text-gray-700 mb-3">1. Article Content</label>
+                <textarea id="articleContent" rows="15" placeholder="Paste your article content here..." 
+                          class="w-full p-4 border-2 border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue transition-all shadow-inner"></textarea>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    
+                    <button onclick="checkBrandSafety()" 
+                            class="py-3 px-4 bg-primary-blue hover:bg-blue-700 text-white font-bold text-lg rounded-lg shadow-md transition-all transform hover:scale-[1.01] focus:outline-none focus:ring-4 focus:ring-blue-300">
+                        <svg class="inline w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        Check Content Safety
+                    </button>
+
+                    <button onclick="analyzeWithLLM()" 
+                            class="py-3 px-4 bg-ai-orange hover:bg-orange-700 text-white font-bold text-lg rounded-lg shadow-md transition-all transform hover:scale-[1.01] focus:outline-none focus:ring-4 focus:ring-orange-300">
+                        <svg class="inline w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                        Get AI Tags (LLM)
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-12 p-6 bg-light-gray rounded-xl border border-gray-200 shadow-inner">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 border-b pb-2">2. Analysis Results</h2>
+
+            <div id="resultsDisplay" class="space-y-4">
+                
+                <div class="bg-white p-5 rounded-lg border-2" id="safetyStatusCard">
+                    <p class="text-lg font-medium text-gray-600">Brand Safe Status:</p>
+                    <p id="isSafe" class="text-3xl font-extrabold text-gray-400 mt-1 transition-colors">Awaiting Content</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="bg-white p-5 rounded-lg border-2">
+                        <p class="text-lg font-medium text-gray-600">Total Keyword Hits:</p>
+                        <p id="totalHits" class="text-3xl font-bold text-gray-700 mt-1">0</p>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-lg border-2">
+                        <p class="text-lg font-medium text-gray-600">Unique Sensitive Keywords Found:</p>
+                        <p id="uniqueKeywordsCount" class="text-3xl font-bold text-gray-700 mt-1">0</p>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-lg border-2">
+                    <p class="text-lg font-medium text-gray-600 mb-3">Detected Keyword Breakdown:</p>
+                    <ul id="detectedKeywordsList" class="list-disc pl-5 text-gray-800">
+                        <li class="text-gray-400 italic list-none">No sensitive keywords detected yet.</li>
+                    </ul>
+                </div>
+                
+                <div class="bg-white p-5 rounded-lg border-2 mt-6">
+                    <h3 class="text-xl font-bold text-ai-orange mb-3 border-b border-gray-200 pb-2 flex items-center">
+                        <svg class="w-6 h-6 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 000 2h6a1 1 0 100-2H7z" clip-rule="evenodd"></path></svg>
+                        LLM Content Tags
+                    </h3>
+                    <div id="llmResults" class="text-gray-800">
+                        <p class="text-gray-400 italic">Run "Get AI Tags" to see structured data output.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // The list of sensitive keywords is now hardcoded and not visible in the UI
+        const sensitiveKeywords = ["ABH", "BUK", "DMT", "DUI", "DWI", "FGM", "GBH", "GHB", "Hun", "IED", "IRA", "KKK", "LSD", "NRA", "P2P", "PCP", "PKK", "S&M", "SWJ", "THC", "TPB", "UAV", "Uzi", "Yid", "ass", "bbw", "cum", "fuk", "fuk", "jiz", "pcp", "qat", "sex", "tit", "tit", "war", "wog", "wop", "yob", "1488", "AK47", "AQAP", "AQIM", "BDSM", "BIAF", "DILF", "DOTA", "DOTA", "DUII", "FARC", "Hell", "ICBM", "ISIL", "Isis", "Juul", "LILF", "MDMA", "NAGR", "Nato", "Nazi", "PEDs", "RIRA", "SA80", "SOPA", "TERF", "Vuze", "Wada", "ammo", "anal", "arse", "arse", "bomb", "bong", "bonk", "cigs", "cnts", "cnts", "cntz", "cntz", "cock", "coma", "coon", "crap", "crim", "cuck", "cull", "cunt", "cunt", "cunt", "dago", "damn", "dead", "died", "dyke", "fart", "fart", "fart", "fcuk", "feck", "fuck", "fuck", "gilf", "gook", "guns", "hash", "heeb", "iQOS", "jail", "jism", "jism", "jizm", "jizz", "khat", "kike", "knob", "kunt", "kush", "kyke", "lout", "maim", "meth", "milf", "mofo", "mofo", "nazi", "nsfw", "nude", "orgy", "p0rn", "paki", "pedo", "perv", "phuq", "piss", "poof", "porn", "pr0n", "quim", "rape", "riot", "sank", "scam", "scat", "sext", "shag", "shit", "sket", "slur", "slut", "slut", "slut", "smut", "snus", "spaz", "spic", "tard", "tart", "thot", "thug", "turd", "twat", "twat", "twat", "wank", "wank", "1337x", "4chan", "69sex", "8chan", "AK-47", "AR-15", "Adfam", "Alluc", "Aryan", "Bersa", "C-130", "Cabos", "Dabiq", "Daesh", "Glock", "HEETS", "HMMWV", "Hymie", "Kazaa", "Kraut", "Locky", "MH370", "Petya", "Petya", "QAnon", "Qaeda", "Qaida", "QtBot", "Raqqa", "Ricin", "Rizla", "SR-71", "Sambo", "Sewol", "SoMud", "THAAD", "USADA", "Viooz", "Vumoo", "Warez", "WinMX", "Wuala", "aMule", "ahole", "ahole", "arse2", "arson", "arson", "bigot", "bisex", "bitch", "boner", "boobs", "brawl", "bribe", "chink", "choad", "choad", "chode", "cholo", "cigar", "clits", "crime", "crook", "death", "dildo", "drown", "dycke", "e-cig", "eMule", "etree", "fanny", "fatal", "fatwa", "feces", "felon", "fraud", "fucck", "fucka", "fugly", "fukin", "fukin", "fukme", "fukme", "fuuck", "fuuck", "ganja", "gitmo", "gutka", "gyppo", "heist", "horny", "iMesh", "iMule", "incel", "jihad", "jisim", "lesbo", "lezza", "loots", "mafia", "minge", "minge", "negro", "nigga", "nonce", "opium", "paedo", "penis", "pervy", "pikey", "poof", "porn", "prick", "pussy", "raped", "rapes", "rifle", "sarin", "semen", "sexxx", "shart", "skank", "slain", "sperg", "spick", "steal", "taser", "theft", "thicc", "thief", "whore", "whore", "45970", "5F-AMB", "69 sex", "AH5017", "AK-47s", "AlAnon", "Altria", "Ansaru", "Bayrob", "Btloft", "Dridex", "Emotet", "ExoSee", "GNUnet", "Goznym", "Haiyan", "Hentai", "Heroin", "Houthi", "I2Phex", "Jobbik", "KCeasy", "MiG-17", "MiG-19", "MiG-21", "Nuvola", "Piolet", "Pool C", "Qakbot", "RShare", "Raqqah", "RipBot", "40787", "Ursnif", "Vizeus", "Yardie", "Zmovie", "a dick", "affray", "airgun", "arrest", "asshat", "assjob", "asswad", "bawbag", "beaner", "behead", "belfie", "biatch", "biatch", "bigtit", "blowie", "bollox", "botnet", "broolz", "buggar", "bugger", "bunker", "chinky", "chinky", "clunge", "conman", "debris", "dopers", "doping", "doxing", "doxing", "erotic", "faggit", "faggot", "faggot", "famine", "fatass", "felony", "feltch", "femdom", "fetish", "flakka", "floosy", "fucker", "fucker", "fuckin", "fuckin", "fuckme", "fuckup", "fukyou", "goddam", "gringo", "gunman", "gunmen", "gutkha", "hacked", "hijack", "hijack", "honkey", "hooker", "hotsex", "humvee", "incall", "incest", "jigger", "jihadi", "jizzim", "jizzum", "kidnap", "killed", "killer", "knifed", "knifed", "lolcow", "looted", "macaco", "minger", "munter", "murder", "n-word", "nabbed", "nazism", "newfag", "nicked", "niggaz", "nigger", "nigger", "niglet", "nignog", "nudity", "nympho", "opiate", "orgasm", "paypig", "pecker", "peyote", "phuked", "pistol", "poison", "police", "proles", "rapist", "rectum", "reefer", "retard", "rimjob", "robbed", "robber", "sadist", "scrote", "sexdvd", "shisha", "shited", "sniper", "sodomy", "spliff", "spooge", "sprain", "stolen", "tirade", "titjob", "tittie", "todger", "tosser", "tranny", "trauma", "triads", "troops", "tugjob", "twinks", "vagina", "vandal", "vapers", "vaping", "voyeur", "wanker", "xq-58a", "yakuza", "zealot", "zoosex", "Beretta", "BitSoup", "BitWiki", "Breivik", "DrugFam", "Erkannt", "Freenet", "GamAnon", "Gootkit", "Hagupit", "IS flag", "Lulzsec", "M1151A1", "MP shot", "Movie4k", "Nopetya", "Paveway", "Pornhub", "SEXVIDX", "Shabaab", "Taleban", "Taliban", "a drunk", "a steal", "alQaeda", "alQaida", "ampland", "analcam", "analsex", "arsehat", "arsewad", "ashtray", "assault", "assfuck", "asshead", "asshole", "assshit", "asswipe", "badfuck", "bastard", "bayonet", "bazooms", "bellend", "bellend", "big ass", "bigotry", "bilking", "bitcher", "blowjob", "boffing", "bollock", "bondage", "boobies", "bribery", "brieing", "brothel", "buggery", "bukkake", "bullets", "bullpup", "bumfuck", "bumhole", "burgled", "buttcam", "callboy", "capsize", "carbine", "chemsex", "chinkie", "cholera", "cocaine", "coochie", "coroner", "crapper", "crybaby", "cuckery", "cumfest", "cumshot", "cumslut", "defraud", "desnuda", "dickwad", "dickwod", "died of", "died on", "dipshit", "docxing", "dogging", "doxxing", "drugged", "druggie", "dumshit", "erotica", "erotika", "fag bag", "fag hag", "fagtard", "fatally", "felatio", "fire at", "fisting", "floozie", "footjob", "forgery", "freesex", "fuckboy", "fuckboy", "fuckoff", "fuckwad", "fuckwit", "fuckyou", "funeral", "gay ass", "gay wad", "goombah", "grenade", "groping", "gunfire", "gunshot", "hacking", "had sex", "halfwit", "handgun", "handjob", "hit*car", "hostage", "huffing", "humping", "illegal", "injured", "inmates", "isoHunt", "jigaboo", "jihadist", "jizzim", "jizzum", "ketamine", "kike", "kill gay", "klansmen", "knifeman", "knifemen", "knobhead", "ladygasm", "live sex", "loot box", "looters", "looting", "lynched", "machete", "malware", "mantrap", "militia", "missile", "missile", "mobbing", "mobster", "muggers", "mugging", "mulatto", "my dick", "neonazi", "nig-nog", "nipslip", "nutsack", "obscene", "on my d", "oralsex", "orgasim", "outcall", "perjury", "pervert", "phaggot", "phuking", "phukked", "pillock", "pirated", "poacher", "poofter", "poonani", "poppers", "pre-cum", "punanny", "raghead", "redpill", "redtube", "retards", "rim job", "rimming", "schlong", "scrotum", "scumbag", "sex act", "sex dvd", "sex toy", "sexchat", "sexclub", "sexline", "sexshop", "sexsite", "sextoys", "sheboon", "shemale", "shitbag", "shitfit", "shitter", "shotgun", "sidearm", "slamsex", "slapper", "slavery", "slutbag", "smoking", "sod off", "soldier", "splooge", "stabbed", "stabbed", "strapon", "suck me", "suicide", "teensex", "the NRA", "thieves", "titcoin", "titfuck", "titwank", "tobacco", "topless", "torpedo", "torrent", "torture", "tosspot", "trolled", "tsunami", "upskirt", "upskirt", "vandals", "vishing", "vjayjay", "warfare", "warhead", "warship", "wartime", "warzone", "weapons", "weapons", "wetback", "wounded", "x rated", "yiffing", "14 words", "ANts P2P", "AdmireMe", "BTJunkie", "Bayfiles", "BitComet", "BitToxic", "Blubster", "Cosbeyed", "Demonoid", "Dignitas", "FlixFlux", "Gaza war", "Gnucleus", "Harveyed", "I2PSnark", "Islam4UK", "Le Joola", "Leechers", "LimeWire", "MLDonkey", "Mamading", "Manolito", "Marlboro", "Mininova", "NotPetya", "NovX ARX", "OnlyFans", "PasteBay", "Rohypnol", "Roth IRA", "Shareaza", "Shih Tzu", "Silk Cut", "Soulseek", "Torrentz", "Trickbot", "Tubeplus", "WannaCry", "WannaCry", "YummyCum", "ZZZ Tube", "accident", "air base", "aircrash", "al Qaeda", "al Qaida", "al-Qaeda", "al-Qaida", "amp land", "amputate", "anal sex", "aquagasm", "armament", "arsecock", "arsefuck", "arsehead", "arsehole", "arselick", "arseshit", "arsonist", "ass fuck", "ass hole", "ass hore", "assmunch", "asswhore", "atrocity", "attacked", "bad fuck", "bareback", "bazongas", "beat her", "beheaded", "bell end", "big cock", "big dick", "big tits", "bitchass", "blow job", "bombings", "bomblets", "boy died", "bra shot", "break-in", "bruising", "bullshit", "bum fuck", "burglars", "burglary", "bus fire", "bushfire", "buttfuck", "butthole", "callgirl", "cameltoe", "cannabis", "car bomb", "car fire", "carbines", "chinaman", "cleavage", "clitoris", "club-cum", "clusterf", "cock nob", "cocknose", "cockshit", "cocksuck", "cold war", "comshots", "coontown", "criminal", "crossbow", "cum fest", "cum shot", "cunteyed", "cuntface", "cuntfuck", "cuntlick", "cyberfuc", "cybersex", "deceased", "deepfake", "detonate", "dick bag", "dick wad", "dick wod", "dickfuck", "dickhead", "dickweed", "dog shot", "doochbag", "drug use", "dumb ass", "dumbfuck", "eatpussy", "exploded", "fag stag", "fat bomb", "felching", "fellatio", "feminazi", "firearms", "fireball", "fistfuck", "fondling", "foreplay", "foreskin", "foursome", "freebase", "fucknutt", "fuckpole", "fucktard", "fuckwitt", "fuckyou", "funeral", "gay ass", "gay wad", "goombah", "grenade", "groping", "gunfire", "gunshot", "hacking", "had sex", "halfwit", "handgun", "handjob", "hit*car", "hostage", "huffing", "humping", "illegal", "injured", "inmates", "isoHunt", "jigaboo", "jigaboo", "join IS", "junkies", "juuling", "karezza", "keyword", "knobber", "larceny", "lardass", "lol cow", "lootbox", "looters", "looting", "lynching", "machete", "malware", "mantrap", "militia", "missile", "missile", "mobbing", "mobster", "muggers", "mugging", "mulatto", "my dick", "neonazi", "nig-nog", "nipslip", "nutsack", "obscene", "on my d", "oralsex", "orgasim", "outcall", "perjury", "pervert", "phaggot", "phuking", "phukked", "pillock", "pirated", "poacher", "poofter", "poonani", "poppers", "pre-cum", "punanny", "rag head", "ram raid", "raped by", "red pill", "regiment", "rent boy", "revolver", "run over", "scammers", "sex chat", "sex club", "sex drug", "sex game", "sex pest", "sex ring", "sex shop", "sex tape", "sex tube", "sex work", "sexsites", "sexvideo", "shitface", "shithole", "shitlist", "shitskin", "shootout", "shot her", "shot him", "shot*boy", "shot*man", "shrapnel", "shrapnel", "sodomist", "sodomite", "softcore", "son dies", "stabbing", "stalking", "starkers", "steroids", "strangle", "strap-on", "stun gun", "suck off", "swastika", "swatting", "swingers", "tear gas", "teen sex", "titanime", "titlover", "torrenmt", "trannies", "tribbing", "troilism", "twatface", "twatlips", "twerking", "twocking", "uTorrent", "unlawful", "up skirt", "uptheass", "vibrator", "violence", "voyerweb", "wanksock", "war-torn", "was shot", "weaponry", "wet back", "whiplash", "whorebag", "wildfire", "wimpdick", "wreckage", "xxx film", "xxxrated", "you prole", "youngbabe", "zoophiles", "zoophilia", "zoophilia", "911 victim", "Alps crash", "Astroworld", "BitTornado", "Bittorrent", "Boko Haram", "Bushmaster", "Canyonfire", "Carl Beech", "David Duke", "HammerGuns", "IS fighter", "Isla Vista", "Kama Sutra", "Kazaa Lite", "Kiwi Farms", "Megaupload", "Navy Cross", "Oxy cotton", "Pirate Bay", "Proud Boys", "Pussy Riot", "Queen dies", "Rana Plaza", "Retroshare", "Snappening", "StealthNet", "Superkings", "ThreatGuns", "Timo Glock", "Willow tit", "a shooting", "abused boy", "abused her", "abused him", "abuse~~sex", "acidattack", "adult film", "adult toon", "adult toys", "adultcheck", "adultstore", "air attack", "air strike", "airstrikes", "al Shabab", "al-Qa'ida", "anal toys", "analingus", "anarchist", "animalsex", "anti-tank", "armed man", "armed men", "arms fair", "arms race", "arms test", "artillery", "ass clown", "ass munch", "ass whore", "ass2mouth", "assailant", "assailant", "assburger", "asshopper", "assmonkey", "assmonkey", "asspacker", "asspirate", "asspirate", "assranger", "avalanche", "ayahuasca", "baby died", "ball sack", "bath bomb", "be a scam", "been shot", "big pussy", "biker hit", "black box", "blackmail", "bloodshed", "boat sank", "bomb boot", "bomb plot", "bomb vest", "bombed by", "bombmaker", "bra snaps", "breastjob", "broke*hip", "bug bombs", "bull dyke", "bung hole", "bus blast", "bus crash", "bus smash", "butt bang", "butt fuck", "butt play", "butt plug", "buttstock", "call boys", "camel toe", "car crash", "car death", "car smash", "car wreck", "ceasefire", "child sex", "cigarette", "cigarillo", "cirrhosis", "civil war", "cock ring", "cock suck", "cockblock", "cocklover", "cocktease", "com shots", "cottaging", "crackpipe", "crimewave", "cuck porn", "cuckooing", "cum queen", "cumbubble", "cumeating", "cumfiesta", "cumjockey", "cyberfuck", "date rape", "dead aged", "deathtoll", "dick face", "dick head", "dick hole", "dick milk", "dick slap", "dick weed", "died aged", "died from", "dirty jew", "dope test", "douchebag", "drug debt", "drug lord", "drug test", "duck dick", "eat pussy", "erogenous", "explosion", "extortion", "extremism", "extremist", "extremist", "fake bomb", "far-right", "fire rips", "fire risk", "firefight", "fraudster", "free porn", "frostbite", "fucked by", "fucks her", "fucks him", "fuckstick", "fuckstick", "gang bang", "gang rape", "gay abuse", "gay snake", "girl died", "group sex", "guerrilla", "gun death", "gun drawn", "gunbattle", "had a gun", "hash pipe", "hate mobs", "have died", "head shop", "her death", "his death", "hit*train", "holocaust", "hot pussy", "hotel-cum", "housefire", "huge fire", "huge hack", "huge tits", "indecency", "jailhouse", "kidnapper", "kill*wife", "killed by", "kinksters", "kumbubble", "lapdancer", "left*dead", "life raft", "lifeboats", "lose*life", "man paste", "marijuana", "masochist", "mass rape", "mescaline", "meth head", "methadone", "moosewank", "motorbutt", "mown down", "muff diver", "mujahedin", "munitions", "murdering", "narcotics", "nerve gas", "nerve gas", "paralysed", "paralyzed", "pedophile", "peepshows", "pep pills", "persecute", "picaninny", "pink oboe", "pipe bomb", "pipe bomb", "pissflaps", "poisoning", "pony play", "poon tang", "poopshoot", "porn film", "porn site", "porn star", "porn tube", "pornflick", "punch her", "punch him", "punish lgbt", "pushed*Tube", "qBittorrent", "quake kills", "rabiosexual", "racial joke", "ram raiders", "ran aground", "rape babies", "rescue team", "riot police", "royal death", "run aground", "school fire", "search crew", "seized guns", "severe fire", "sex assault", "sex charges", "sex dungeon", "sex fiction", "sex fighter", "sex for aid", "sex offense", "sex party", "sex sites", "sex slave", "sex slave", "sex swing", "sex texts", "sex video", "sexy pics", "sexytimes", "shark bit", "she pooed", "ship sank", "shithouse", "shitstain", "shitstorm", "shittiest", "shoot him", "shoot man", "shot by a", "shot dead", "shot dead", "shot down", "shot teen", "shot*dead", "shot*girl", "skinheads", "skullfuck", "smackhead", "smuggling", "speedball", "stillborn", "stripclub", "suck cock", "suck dick", "swears at", "taboo sex", "taken ill", "teabagged", "teen porn", "terrorist", "text pest", "the blast", "the slurs", "threesome", "time bomb", "tiny dick", "titfuckin", "titlicker", "tittyfuck", "tittywank", "tot death", "towelhead", "tube bomb", "upthebutt", "van*crash", "vandalise", "vandalism", "vibrators", "vigilante", "voyeurism", "voyeurweb", "war crime", "warplanes", "was raped", "were hurt", "were shot", "whoreface", "womandies", "xxx movie", "xxx photo", "you prole", "youngbabe", "zoophiles", "zoophilia", "zoophilia", "911 victim", "Alps crash", "Astroworld", "BitTornado", "Bittorrent", "Boko Haram", "Bushmaster", "Canyonfire", "Carl Beech", "David Duke", "HammerGuns", "IS fighter", "Isla Vista", "Kama Sutra", "Kazaa Lite", "Kiwi Farms", "Megaupload", "Navy Cross", "Oxy cotton", "Pirate Bay", "Proud Boys", "Pussy Riot", "Queen dies", "Rana Plaza", "Retroshare", "Snappening", "StealthNet", "Superkings", "ThreatGuns", "Timo Glock", "Willow tit", "a shooting", "abused girl", "acid attack", "adult check", "adult clubs", "adult image", "adult movie", "adult phone", "adult photo", "adult store", "airaccident", "airdisaster", "altercation", "amphetamine", "analsweetie", "anti-doping", "anti-piracy", "anti-terror", "arse bandit", "arse banger", "asphyxiated", "ass blaster", "ass centric", "ass licking", "ass muncher", "ass puppies", "assault her", "assault him", "attacked by", "baby dumped", "baby killed", "baby killer", "ball licker", "ban smoking", "banned drug", "basic bitch", "baton round", "battle game", "battlefield", "beastiality", "bedded over", "been hacked", "been killed", "bereavement", "big nipples", "bikini shot", "bit torrent", "black sambo", "blacking up", "blast kills", "blast scene", "bloody hell", "bloody nose", "boat rescue", "body armour", "bog trotter", "bomb alert", "bomb blast", "bomb blast", "bomb scare", "bomb squad", "booby trap", "border war", "boy killed", "brain dead", "breast job", "breastgasm", "broken back", "broken bone", "broken limb", "bucket-bomb", "bumble fuck", "bunga-bunga", "bunker shot", "bunker shot", "burned down", "burning car", "burning car", "burnt alive", "burnt house", "bus bombing", "bus flipped", "bush boogie", "butt cherry", "butt fucker", "butt pirate", "butt-fisted", "buttlegging", "campus rape", "car flipped", "car strikes", "carfentanil", "caught fire", "chan boards", "cherry meth", "child abuse", "child labor", "circle jerk", "clusterfuck", "coach crash", "cock cowboy", "cock licker", "cock smoker", "cock sucker", "cockcontrol", "cockmongrel", "cop killing", "counterfeit", "crack whore", "crash scene", "crashed*car", "crime scene", "culture war", "cum on tits", "cunillingus", "cunnilingus", "cyber-spies", "cyberattack", "data breach", "dead at the", "dead babies", "dead bodies", "deadly drug", "deadly fire", "death count", "death knell", "decapitated", "deep throat", "defloration", "detained in", "devastation", "dick monger", "dick sucker", "dick weasel", "died in the", "died*cancer", "dies at age", "diesel dyke", "doggiestyle", "donkey dick", "douchecanoe", "driver died", "drug addict", "drug cartel", "drug clinic", "drug dealer", "drug dealer", "drug deaths", "drug pusher", "drug taking", "drugs sting", "drugs trial", "drugs*found", "drug~misuse", "dumped baby", "e-cigarette", "eDonkey2000", "ecstacy use", "ejaculation", "elder abuse", "engine fire", "engine fire", "erect penis", "euthanising", "eve-teasing", "executioner", "face fucked", "face fucker", "facesitting", "fallen sick", "fannyfucker", "father dies", "feared dead", "ferry crash", "ferry sinks", "fire damage", "fire danger", "fire hazard", "fire in the", "fire season", "fire spread", "flash burns", "foot fetish", "forest fire", "fornophilia", "frostjacker", "fuck puppet", "fucked hard", "fuckinbitch", "fucktrumpet", "fudgepacker", "game piracy", "gang fights", "gash in her", "gash in his", "gay-looking", "girl killed", "girlie bars", "glowposting", "groomed*boy", "groping her", "gun attack", "gun battle", "gun-toting", "half breed", "half caste", "half-naked", "hanged*men", "harassment", "hate crime", "hate crime", "hate speech", "hate symbol", "hate-filled", "he was shot", "head injury", "head trauma", "heat stroke", "hippy crack", "hit a drone", "hit and run", "hob knocker", "hot bitches", "hotel blaze", "ice addicts", "in shooting", "infanticide", "infertility", "injured arm", "jelly boobs", "jelly penis", "jelly willy", "jet crashed", "jet downing", "jet fighter", "jet*crashed", "jet*missing", "junglebunny", "kalashnikov", "key jammers", "killed live", "killed*baby", "knife crime", "lacerations", "lap dancing", "lawlessness", "left*killed", "legal highs", "letter bomb", "lewd remark", "life jacket", "live bullet", "live jasmin", "lone gunman", "lorry crash", "love muscle", "lung cancer", "machine-gun", "man trapped", "market bomb", "mass killer", "mayday call", "mild stroke", "minor burns", "misconduct", "missing jet", "moist snuff", "molestation", "moped thief", "motha fucka", "mothafuckaz", "mother dies", "motherfuker", "muff licker", "murder case", "mustard gas", "mutilations", "muzzlebrake", "naked girls", "naked photo", "nasal snuff", "nasty burns", "necrophilia", "necrophilia", "nerve agent", "no fly zone", "no-fly list", "nuclear war", "of the dead", "opened fire", "outdoor sex", "paedophilia", "panty crust", "passed away", "peace talks", "peeping Tom", "penisfucker", "penispuffer", "people dead", "people died", "people shot", "perpetrator", "person dead", "petrol bomb", "plane crash", "plane*crash", "plant blast", "pole dancer", "pole smoker", "police drug", "porchmonkey", "pornography", "post-mortem", "prison camp", "psychedelic", "punched her", "punched him", "punish lgbt", "pushed*Tube", "qBittorrent", "quake kills", "rabiosexual", "racial joke", "ram raiders", "ran aground", "rape babies", "rescue team", "riot police", "royal death", "run aground", "school fire", "search crew", "seized guns", "severe fire", "sex addict", "sex attack", "sex flicks", "sex movies", "sex scenes", "sex sledge", "sex worker", "sex-crazed", "sextortion", "sexual act", "sexy girls", "ship crash", "ship sinks", "shoot guns", "shot a man", "shot*times", "shot*woman", "sick abuse", "sinsemilla", "slantyeyes", "small arms", "small cock", "small tits", "smashed up", "sniff glue", "spice drug", "spy planes", "staff*shot", "starvation", "stay sober", "stealthing", "stop thief", "strip club", "striptease", "submachine", "sugar tits", "swear word", "tailstrike", "target gay", "teabag her", "teabag him", "teabagging", "terror act", "terror hub", "terrorcell", "the groids", "the hacker", "thick cock", "three some", "threw baby", "threw*baby", "throw*baby", "tot killed", "towel head", "tower fire", "track fire", "trafficked", "traincrash", "tram crash", "uncut dick", "up the ass", "van attack", "vandalised", "veiny dick", "vile abuse", "vile posts", "voyeurteen", "was groped", "waterboard", "whorehouse", "woman dead", "woman dies", "woman shot", "xxx comics", "zipperhead", "77 bombings", "911 attacks", "Arena blast", "Ares Galaxy", "AstraZeneca", "B52 crashes", "BitShockorg", "Bittorrents", "Black Opium", "BushTorrent", "David Sweat", "Dylann Roof", "Dylann Roof", "Hammerskins", "IS fighters", "ISIS attack", "JPS Players", "Jo Cox shot", "Khmer Rouge", "Khuram Butt", "MonoTorrent", "Muslim hate", "N.Y. attack", "NYC bombing", "Navy's F-18", "Nazi-themed", "Nusra Front", "Ondertitels", "Page 3 girl", "Punch cigar", "Rehab~drugs", "Rolf Harris", "Sharing Max", "Sonnenkrieg", "Syed Farook", "Syrian army", "TrustyFiles", "WanaCrypt0r", "WatchSeries", "White Widow", "abused girl", "acid attack", "adult check", "adult clubs", "adult image", "adult movie", "adult phone", "adult photo", "adult store", "airaccident", "airdisaster", "altercation", "amphetamine", "analsweetie", "anti-doping", "anti-piracy", "anti-terror", "arse bandit", "arse banger", "asphyxiated", "ass blaster", "ass centric", "ass licking", "ass muncher", "ass puppies", "assault her", "assault him", "attacked by", "baby dumped", "baby killed", "baby killer", "ball licker", "ban smoking", "banned drug", "basic bitch", "baton round", "battle game", "battlefield", "beastiality", "bedded over", "been hacked", "been killed", "bereavement", "big nipples", "bikini shot", "bit torrent", "black sambo", "blacking up", "blast kills", "blast scene", "bloody hell", "bloody nose", "boat rescue", "body armour", "bog trotter", "bomb attack", "bomb attack", "bomb debris", "bomb makers", "bomb threat", "bomb-making", "bombs found", "boy trapped", "bridge jump", "broken back", "broken bone", "broken limb", "bucket-bomb", "bumble fuck", "bunga-bunga", "bunker shot", "bunker shot", "burned down", "burning car", "burning car", "burnt alive", "burnt house", "bus bombing", "bus flipped", "bush boogie", "butt cherry", "butt fucker", "butt pirate", "butt-fisted", "buttlegging", "campus rape", "car flipped", "car strikes", "carfentanil", "caught fire", "chan boards", "cherry meth", "child abuse", "child labor", "circle jerk", "clusterfuck", "coach crash", "cock cowboy", "cock licker", "cock smoker", "cock sucker", "cockcontrol", "cockmongrel", "cop killing", "counterfeit", "crack whore", "crash scene", "crashed*car", "crime scene", "culture war", "cum on tits", "cunillingus", "cunnilingus", "cyber-spies", "cyberattack", "data breach", "dead at the", "dead babies", "dead bodies", "deadly drug", "deadly fire", "death count", "death knell", "decapitated", "deep throat", "defloration", "detained in", "devastation", "dick monger", "dick sucker", "dick weasel", "died in the", "died*cancer", "dies at age", "diesel dyke", "doggiestyle", "donkey dick", "douchecanoe", "driver died", "drug addict", "drug cartel", "drug clinic", "drug dealer", "drug dealer", "drug deaths", "drug pusher", "drug taking", "drugs sting", "drugs trial", "drugs*found", "drug~misuse", "dumped baby", "e-cigarette", "eDonkey2000", "ecstacy use", "ejaculation", "elder abuse", "engine fire", "engine fire", "erect penis", "euthanising", "eve-teasing", "executioner", "face fucked", "face fucker", "facesitting", "fallen sick", "fannyfucker", "father dies", "feared dead", "ferry crash", "ferry sinks", "fire damage", "fire danger", "fire hazard", "fire in the", "fire season", "fire spread", "flash burns", "foot fetish", "forest fire", "fornophilia", "frostjacker", "fuck puppet", "fucked hard", "fuckinbitch", "fucktrumpet", "fudgepacker", "game piracy", "gang fights", "gash in her", "gash in his", "gay-looking", "girl killed", "girlie bars", "glowposting", "groomed*boy", "groping her", "gun attack", "gun battle", "gun-toting", "half breed", "half caste", "half-naked", "hanged*men", "harassment", "hate crime", "hate crime", "hate speech", "hate symbol", "hate-filled", "he was shot", "head injury", "head trauma", "heat stroke", "hippy crack", "hit a drone", "hit and run", "hob knocker", "hot bitches", "hotel blaze", "ice addicts", "in shooting", "infanticide", "infertility", "injured arm", "jelly boobs", "jelly penis", "jelly willy", "jet crashed", "jet downing", "jet fighter", "jet*crashed", "jet*missing", "junglebunny", "kalashnikov", "key jammers", "killed live", "killed*baby", "knife crime", "lacerations", "lap dancing", "lawlessness", "left*killed", "legal highs", "letter bomb", "lewd remark", "life jacket", "live bullet", "live jasmin", "lone gunman", "lorry crash", "love muscle", "lung cancer", "machine-gun", "man trapped", "market bomb", "mass killer", "mayday call", "mild stroke", "minor burns", "misconduct", "missing jet", "moist snuff", "molestation", "moped thief", "motha fucka", "mothafuckaz", "mother dies", "motherfuker", "muff licker", "murder case", "mustard gas", "mutilations", "muzzlebrake", "naked girls", "naked photo", "nasal snuff", "nasty burns", "necrophilia", "necrophilia", "nerve agent", "no fly zone", "no-fly list", "nuclear war", "of the dead", "opened fire", "outdoor sex", "paedophilia", "panty crust", "passed away", "peace talks", "peeping Tom", "penisfucker", "penispuffer", "people dead", "people died", "people shot", "perpetrator", "person dead", "petrol bomb", "plane crash", "plane*crash", "plant blast", "pole dancer", "pole smoker", "police drug", "porchmonkey", "pornography", "post-mortem", "prison camp", "psychedelic", "punched her", "punched him", "punish lgbt", "pushed*Tube", "qBittorrent", "quake kills", "rabiosexual", "racial joke", "ram raiders", "ran aground", "rape babies", "rescue team", "riot police", "royal death", "run aground", "school fire", "search crew", "seized guns", "severe fire", "sex addict", "sex attack", "sex flicks", "sex movies", "sex scenes", "sex sledge", "sex worker", "sex-crazed", "sextortion", "sexual act", "sexy girls", "ship crash", "ship sinks", "shoot guns", "shot a man", "shot*times", "shot*woman", "sick abuse", "sinsemilla", "slantyeyes", "small arms", "small cock", "small tits", "smashed up", "sniff glue", "spice drug", "spy planes", "staff*shot", "starvation", "stay sober", "stealthing", "stop thief", "strip club", "striptease", "submachine", "sugar tits", "swear word", "tailstrike", "target gay", "teabag her", "teabag him", "teabagging", "terror act", "terror hub", "terrorcell", "the groids", "the hacker", "thick cock", "three some", "threw baby", "threw*baby", "throw*baby", "tot killed", "towel head", "tower fire", "track fire", "trafficked", "traincrash", "tram crash", "uncut dick", "up the ass", "van attack", "vandalised", "veiny dick", "vile abuse", "vile posts", "voyeurteen", "was groped", "waterboard", "whorehouse", "woman dead", "woman dies", "woman shot", "xxx comics", "zipperhead"];
+
+        // --- Original Brand Safety Function ---
+        function checkBrandSafety() {
+            const content = document.getElementById('articleContent').value.toLowerCase();
+            const results = {
+                hits: 0,
+                uniqueKeywords: new Set(),
+                breakdown: {}
+            };
+
+            if (content.trim() === "") {
+                alert("Please paste content into the text area to perform a check.");
+                return;
+            }
+
+            sensitiveKeywords.forEach(keyword => {
+                let count = 0;
+                let index = content.indexOf(keyword);
+                while (index !== -1) {
+                    count++;
+                    results.hits++;
+                    results.uniqueKeywords.add(keyword);
+                    index = content.indexOf(keyword, index + keyword.length);
+                }
+                if (count > 0) {
+                    results.breakdown[keyword] = count;
+                }
+            });
+
+            // Determine Safety Status
+            const isSafe = results.hits === 0;
+            const statusCard = document.getElementById('safetyStatusCard');
+            const isSafeEl = document.getElementById('isSafe');
+
+            statusCard.className = `bg-white p-5 rounded-lg border-2 ${isSafe ? 'border-safe' : 'border-unsafe'} shadow-lg`;
+            isSafeEl.textContent = isSafe ? 'CLEAN: No Sensitive Keywords Found' : 'UNSAFE: Sensitive Content Detected!';
+            isSafeEl.className = `text-3xl font-extrabold mt-1 transition-colors ${isSafe ? 'text-safe' : 'text-unsafe'}`;
+
+            // Update Metrics
+            document.getElementById('totalHits').textContent = results.hits;
+            document.getElementById('uniqueKeywordsCount').textContent = results.uniqueKeywords.size;
+
+            // Update Breakdown List
+            const listEl = document.getElementById('detectedKeywordsList');
+            listEl.innerHTML = ''; // Clear previous results
+
+            if (results.hits === 0) {
+                listEl.innerHTML = '<li class="text-gray-400 italic list-none">No sensitive keywords detected.</li>';
+            } else {
+                // Sort keywords by hit count for better readability
+                Object.entries(results.breakdown)
+                    .sort(([, countA], [, countB]) => countB - countA)
+                    .forEach(([keyword, count]) => {
+                        const li = document.createElement('li');
+                        li.className = 'py-1 text-red-700';
+                        li.innerHTML = `"<span class="font-semibold">${keyword}</span>" found <span class="font-extrabold">${count}</span> time${count > 1 ? 's' : ''}`;
+                        listEl.appendChild(li);
+                    });
+            }
+        }
+
+        // --- NEW LLM Tagging Function ---
+        function analyzeWithLLM() {
+            const content = document.getElementById('articleContent').value;
+            const llmResultsEl = document.getElementById('llmResults');
+
+            if (content.trim() === "") {
+                llmResultsEl.innerHTML = '<p class="text-unsafe font-semibold">Error: Please paste content into the text area first.</p>';
+                return;
+            }
+
+            llmResultsEl.innerHTML = '<p class="text-ai-orange font-semibold flex items-center"><svg class="animate-spin w-5 h-5 mr-3" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Simulating lightweight LLM analysis...</p>';
+
+            // NOTE: In a real-world scenario, you would send 'content' to an API endpoint 
+            // running an open-source model like Llama.cpp, ONNX, or a specialized transformer 
+            // for fast, structured output. This is a pure JS simulation for the front-end.
+            setTimeout(() => {
+                const length = content.length;
+                
+                // Simple logic to generate dynamic, structured mock tags based on content length
+                const tags = {
+                    entities: (length > 500) 
+                        ? ['Acme Corp', 'CEO Jane Doe', 'The Stock Market'] 
+                        : ['Local News', 'Main Subject', 'Key Date'],
+                    tone: (Math.random() > 0.6) ? 'Informative/Neutral' : 'Cautious/Analytical',
+                    sentiment: (length > 1000) ? 'Slightly Negative' : 'Balanced',
+                    themes: ['Corporate Finance', 'Investment Outlook', 'Regulatory Compliance'],
+                    confidence: 0.92 // High confidence for structured output
+                };
+
+                const jsonOutput = JSON.stringify(tags, null, 2);
+
+                llmResultsEl.innerHTML = `
+                    <p class="font-medium text-gray-700 mb-2">The simulated LLM generated the following structured JSON data for AI agents:</p>
+                    <pre class="bg-gray-100 p-3 rounded-lg text-sm overflow-x-auto border border-gray-300">
+                        <code>${jsonOutput}</code>
+                    </pre>
+                    <div class="mt-4 space-y-2">
+                        <p class="flex items-center text-sm"><span class="font-semibold w-24 text-gray-600">Tone:</span> <span class="text-safe">${tags.tone}</span></p>
+                        <p class="flex items-center text-sm"><span class="font-semibold w-24 text-gray-600">Sentiment:</span> <span class="text-primary-blue">${tags.sentiment}</span></p>
+                        <p class="flex items-center text-sm"><span class="font-semibold w-24 text-gray-600">Themes:</span> <span class="text-gray-800">${tags.themes.join(', ')}</span></p>
+                    </div>
+                `;
+
+            }, 1500); // Simulate 1.5 second LLM processing time
+        }
+
+        // Ensure the original function is available (it's in your prompt but not defined outside the snippet)
+        // This is a minimal definition so the page doesn't crash on load if the user hits the original button first.
+        if (typeof checkBrandSafety === 'undefined') {
+            window.checkBrandSafety = checkBrandSafety;
+        }
+    </script>
+</body>
+</html>
